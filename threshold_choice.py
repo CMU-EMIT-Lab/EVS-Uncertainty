@@ -54,6 +54,5 @@ for i in range(len(params)):
         params.iloc[i]['CovShapeScale'] = 0
         params.iloc[i]['Rate (1/mm^3)'] = 0
         params.iloc[i]['STDRate'] = 0
-
-params.to_csv('params_new.csv')
+        params.to_csv('parameters_new.csv')
     

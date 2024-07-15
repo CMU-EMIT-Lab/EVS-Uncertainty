@@ -129,6 +129,15 @@ for v1 in v1s:
         #https://stats.stackexchange.com/questions/549204/variance-of-mle-poisson-distribution
         #https://www.statlect.com/fundamentals-of-statistics/Poisson-distribution-maximum-likelihood
         stats = (len(evd)/row['Volume (mm^3)']*v1, np.sqrt(len(evd)/row['Volume (mm^3)']**2) *v1)
+        
+        df.iloc[i]['Shape'] = shape
+        df.iloc[i]['Scale'] = scale
+        df.iloc[i]['STDShape'] = cov[1,1]
+        df.iloc[i]['STDScale'] = cov[0,0]
+        df.iloc[i]['CovShapeScale'] = cov[1,0]
+        df.iloc[i]['Rate (1/mm^3)'] = stats[0]
+        df.iloc[i]['STDRate'] = stats[1]
+        df.to_csv('parameters_new.csv')
 
         #get poisson distribution with gaussian estimator        
         fn = getfn(stats)
