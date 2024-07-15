@@ -46,13 +46,14 @@ for i in range(len(params)):
     if t == '':
         break
     else:
-        ts.append(float(t))
-    names.append(row.Name)
+        params.iloc[i]['Threshold (um)'] = t
+        params.iloc[i]['Shape'] = 0
+        params.iloc[i]['Scale'] = 0
+        params.iloc[i]['STDShape'] = 0
+        params.iloc[i]['STDScale'] = 0
+        params.iloc[i]['CovShapeScale'] = 0
+        params.iloc[i]['Rate (1/mm^3)'] = 0
+        params.iloc[i]['STDRate'] = 0
 
-ts = np.array(ts)
-np.save('ts.npy', ts)
-
-df = np.array([names, ts]).T
-
-df = pd.DataFrame(df, columns = ['Name', 'Threshold (um)'])
-df.to_csv('thresholds.csv')
+params.to_csv('params_new.csv')
+    
