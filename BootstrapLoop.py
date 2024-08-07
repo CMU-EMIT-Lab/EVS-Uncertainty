@@ -9,6 +9,12 @@ from sympy.stats import MultivariateNormal, density, Poisson, Normal
 import cupy as cp
 import os
 
+# Disable memory pool for device memory (GPU)
+cp.cuda.set_allocator(None)
+
+# Disable memory pool for pinned memory (CPU).
+cp.cuda.set_pinned_memory_allocator(None)
+
 #makes directory if it doesn't exist
 try:
     os.mkdir('CDFs')
