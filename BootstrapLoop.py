@@ -87,7 +87,6 @@ def F_x(xs, l, conv = 0.0005):
 
     return rls.get()
 
-#loops over all volumes
 with cp.cuda.Device(1):
     for v1 in v1s:
         #loops over all samples
@@ -208,13 +207,11 @@ with cp.cuda.Device(1):
 
 
             #generation of CDFs
-            samples = xs.get()
-            xs = np.arange(threshold, np.max(evd)+threshold, dx)
-            xs2 = np.arange(threshold, np.quantile(samples, 0.99), dx)
-            pdf, bins = np.histogram(samples, xs2, density = True)
-            cdf = np.cumsum(pdf*dx)
+            xs2 = cp.arange(threshold, cp.quantile(xs, 0.99), dx)
+            pdf, bins = cp.histogram(xs, xs2, density = True)
+            cdf = cp.cumsum(pdf*dx)
 
             bins = (bins[1:] + bins[:-1])/2
 
             #saving cdf
-            np.save('CDFs/' + row.Name + '_CDF_{}.npy'.format(v1), np.array([bins, cdf]))
+            np.save('CDFs/' + row.Name + '_CDF_{}.npy'.format(v1), np.array([bins.get(), cdf.get()]))
