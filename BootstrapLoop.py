@@ -18,7 +18,7 @@ except Exception:
 
 v1s = [250, 500, 1000] #extrapolated volumes
 
-dx = 0.001 #resolution of CDF
+dx = 0.01 #resolution of CDF
 
 df = pd.read_csv('data/parameters.csv') #read in csv of thresholds
 
@@ -130,14 +130,6 @@ with cp.cuda.Device(1):
             #https://www.statlect.com/fundamentals-of-statistics/Poisson-distribution-maximum-likelihood
             stats = (len(evd)/row['Volume (mm^3)'], np.sqrt(len(evd)/row['Volume (mm^3)']**2))
             
-            df.iloc[i]['Shape'] = shape
-            df.iloc[i]['Scale'] = scale
-            df.iloc[i]['STDShape'] = cov[1,1]
-            df.iloc[i]['STDScale'] = cov[0,0]
-            df.iloc[i]['CovShapeScale'] = cov[1,0]
-            df.iloc[i]['Rate (1/mm^3)'] = stats[0]
-            df.iloc[i]['STDRate'] = stats[1]
-            df.to_csv('parameters_new.csv')
 
             #get poisson distribution with gaussian estimator        
             fn = getfn(stats*v1)
@@ -153,13 +145,6 @@ with cp.cuda.Device(1):
                     probs.append(0)
             probs = np.array(probs, dtype = float)
 
-            
-            #get values of pore size
-            xs = np.arange(threshold, np.max(evd)+threshold, dx)
-            fx = F_x(xs, stats[0]*v1)
-
-            #obtain standard cdf values of pore size cdf
-            ys = (np.ones_like(xs)-(np.ones_like(xs)+shape/scale*(xs - threshold*np.ones_like(threshold)))**(-1/shape))**stats[0]*v1
 
             xs = cp.array(np.arange(0, 3*stats[0]*v1))
             cdf = cp.array(np.array(np.cumsum(probs*dx), dtype = float))
@@ -207,7 +192,7 @@ with cp.cuda.Device(1):
 
 
             #generation of CDFs
-            xs2 = cp.arange(threshold, cp.quantile(xs, 0.99), dx)
+            xs2 = cp.arange(cp.quantile(xs, 0.001), cp.quantile(xs, 0.999), dx)
             pdf, bins = cp.histogram(xs, xs2, density = True)
             cdf = cp.cumsum(pdf*dx)
 
@@ -215,3 +200,5 @@ with cp.cuda.Device(1):
 
             #saving cdf
             np.save('CDFs/' + row.Name + '_CDF_{}.npy'.format(v1), np.array([bins.get(), cdf.get()]))
+
+            del xs, xs2, pdf, bins, cdf, samples, ss, pgs, ones
