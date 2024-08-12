@@ -22,18 +22,15 @@ except Exception:
     pass
 
 
-v1s = [250, 500, 1000] #extrapolated volumes
+v1s = [395.84] #extrapolated volumes
 
-dx = 0.01 #resolution of CDF
+# files = ['CMU01-08-2', 'CMU04-03', 'CMU02-05-1', 'CMU04-26', 'CMU03-30-2', 'CMU04-04']
+
+dx = 0.1 #resolution of CDF
 
 df = pd.read_csv('data/parameters.csv') #read in csv of thresholds
 
 poredf = pd.read_csv('data/poredf.csv')
-
-
-#moving average for the PDF
-def moving_average(x, w):
-    return np.convolve(x, np.ones(w), 'valid') / w
 
 #Probability of poisson distribution with gaussian uncertainty in estimator 
 def getprobpoiss(x, dl, fdl):
@@ -52,55 +49,20 @@ def getfn(stats):
     return fn
 
 
-
-#obtains CDF
-def F_x(xs, l, conv = 0.0005):
-    xs = cp.array(xs)
-    l = cp.floor(l)
-    i = 1
-    rls = cp.zeros_like(xs)
-    p = 1
-    th = threshold*cp.ones_like(xs)
-    zs = xs - th
-    c1 = p
-
-    #while loop to add up pmf areas until an area of conv is achieved (starts from middle and goes outward)
-    while p > conv:
-        c1 = p
-        if (l - i)+ 1 >= 0:
-            T = (l - i)+ 1
-            try:
-                pp = N(fn.subs(X, T))
-            except Exception:
-                pp = 0
-            if T == 0:
-                rls += float(pp)*cp.ones_like(xs)
-            else:
-                rls += (cp.ones_like(zs)-(cp.ones_like(zs)+shape/scale*(zs))**(-1/shape))**(T)*float(pp)
-            p -= pp
-        
-        T = l+i
-        try:
-            pp = N(fn.subs(X, T))
-        except Exception:
-            pp = 0
-        rls+= float(pp)*(cp.ones_like(zs)-(cp.ones_like(zs)+shape/scale*(zs))**(-1/shape))**(T)
-        p -= pp
-        i+= 1
-
-        if c1 == p:
-            break
-
-    return rls.get()
-
 with cp.cuda.Device(1):
     for v1 in v1s:
         #loops over all samples
-        for i in range(len(df)):
+        for i in range(2, len(df)):
             row = df.iloc[i]
+
+            # if row.Name in files:
+            #     print(row.Name)
+            # else:
+            #     continue
 
             pores = poredf[poredf.Name == row.Name]
             evd = pores[pores['Equivalent Spherical Diameter (um)']>row['Threshold (um)']]['Equivalent Spherical Diameter (um)']
+            lefttail = pores[pores['Equivalent Spherical Diameter (um)']<= row['Threshold (um)']]['Equivalent Spherical Diameter (um)']
 
             dmax = np.max(evd)
             
@@ -134,12 +96,15 @@ with cp.cuda.Device(1):
             #Mean of MLE and Variance of poisson dist divided by vol
             #https://stats.stackexchange.com/questions/549204/variance-of-mle-poisson-distribution
             #https://www.statlect.com/fundamentals-of-statistics/Poisson-distribution-maximum-likelihood
-            stats = (len(evd)/row['Volume (mm^3)'], np.sqrt(len(evd)/row['Volume (mm^3)']**2))
+            stats = np.array([len(evd)/row['Volume (mm^3)'], np.sqrt(len(evd)/row['Volume (mm^3)']**2)])
             
+            stats1 = np.array([len(lefttail)/row['Volume (mm^3)'], np.sqrt(len(lefttail)/row['Volume (mm^3)']**2)])
 
             #get poisson distribution with gaussian estimator        
             fn = getfn(stats*v1)
-            xs = np.arange(0, 3*stats[0]*v1)
+            fn1 = getfn(stats1*v1)
+            xs = np.arange(np.max([stats[0]*v1 - 3*stats[1]*v1, 0]), stats[0]*v1 + 3*stats[1]*v1)
+            xs1 = np.arange(np.max([stats1[0]*v1 - 3*stats1[1]*v1, 0]), stats1[0]*v1 + 3*stats1[1]*v1)
 
             probs = []
 
@@ -151,9 +116,23 @@ with cp.cuda.Device(1):
                     probs.append(0)
             probs = np.array(probs, dtype = float)
 
+            dxs = 1
+            xs = cp.array(xs)
+            cdf = cp.array(np.array(np.cumsum(probs*dxs), dtype = float))
 
-            xs = cp.array(np.arange(0, 3*stats[0]*v1))
-            cdf = cp.array(np.array(np.cumsum(probs*dx), dtype = float))
+            probs1 = []
+
+            #get probabilities for all likely values of x number of pores
+            for j in range(len(xs1)):
+                try:
+                    probs1.append(N(fn1.subs(X, xs1[j])))
+                except Exception:
+                    probs1.append(0)
+            probs1 = np.array(probs1, dtype = float)
+
+            dxs1 = 1
+            xs1 = cp.array(xs1)
+            cdf1 = cp.array(np.array(np.cumsum(probs1*dxs1), dtype = float))
 
             #inverse CDF method
             sampler = uniform()
@@ -163,6 +142,8 @@ with cp.cuda.Device(1):
 
 
             pgs = cp.zeros_like(samples)
+
+            pgs1 = cp.zeros_like(samples)
 
             #generate 1000 pore numbers
             for i in range(len(pgs)):
@@ -174,37 +155,66 @@ with cp.cuda.Device(1):
                     else:
                         pgs[i] = xs[0]
 
+            if stats[0]*v1 < 10:
+            #generate 1000 pore numbers for under threshold
+                for i in range(len(pgs1)):
+                    try:
+                        pgs1[i] = xs1[cp.max(np.argwhere(cdf1 < samples[i]))]
+                    except Exception:
+                        if samples[i]  > 0.5:
+                            pgs1[i] = xs1[-1]
+                        else:
+                            pgs1[i] = xs1[0]
 
+            else:
+                pgs1 = cp.ones_like(pgs1) * stats1[0]*v1
             #generate 1000 shape scale parameters
             ss = cp.array(fmle.rvs(1000))
 
 
             #generate inverse CDF p values
             samples = cp.array(sampler.rvs(1000))
+        
 
             xs = cp.zeros(len(samples)*len(pgs)*len(ss))
-            l = 0
+            ls=  cp.arange(0, len(samples), dtype =  int)
 
             t1 = ss[:, 0]/ss[:, 1]
             s0  = 1/pgs
+
+            s0[pgs == 0] = -1 #case where 0 pores generated
+
             ones = cp.ones_like(samples)
             th = ones*threshold
+
+            lefttail = cp.array(lefttail)
+
+            qs = []
 
             #compute maximum pore size from all of these rvs
             for i in tqdm(range(len(pgs))):
                 for j in range(len(ss)):
-                    xs[l:l+len(samples)] = t1[j]*((ones - samples**s0)**(-ss[j,1])-ones) + th
-                    l+=len(samples)
+                    if pgs[i] > 0:
+                        xs[ls] = t1[j]*((ones - samples**s0[i])**(-ss[j,1])-ones) + th
+                    else:
+                        qs = samples **(1/pgs1)
+                        qs[qs > 1] = 1
+                        qs[qs < 0] = 0
+                        qs[cp.isnan(qs)] = 0
+                        xs[ls] = cp.quantile(lefttail, qs)
 
+                    ls+=len(samples)*ones.astype(int)
 
+            
             #generation of CDFs
-            xs2 = cp.arange(cp.quantile(xs, 0.001), cp.quantile(xs, 0.999), dx)
+            xs2 = cp.arange(cp.min(xs), cp.quantile(xs, 0.999), dx)
             pdf, bins = cp.histogram(xs, xs2, density = True)
             cdf = cp.cumsum(pdf*dx)
 
             bins = (bins[1:] + bins[:-1])/2
 
             #saving cdf
-            np.save('CDFs/' + row.Name + '_CDF_{}.npy'.format(v1), np.array([bins.get(), cdf.get()]))
+            np.save('CDFs/' + row.Name + '_CDF.npy', np.array([bins.get(), cdf.get()]))
 
-            del xs, xs2, pdf, bins, cdf, samples, ss, pgs, ones
+            del xs, xs2, pdf, bins, cdf, samples, ss, pgs, ones, pgs1, ls, qs, lefttail, cdf1, xs1, probs, probs1
+            cp._default_memory_pool.free_all_blocks()
