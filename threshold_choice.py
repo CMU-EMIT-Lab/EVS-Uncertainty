@@ -28,7 +28,7 @@ for i in range(len(params)):
 
     pdf = poredf[poredf.Name == row.Name]
 
-    pdf = pdf[['ESD', 'Label Index']]
+    pdf = pdf[['Equivalent Spherical Diameter (um)']]
     pdf['Label Index'] = pd.to_datetime(pd.date_range(start = '2000', end = '2001', periods = len(pdf))) #equally spaced in 1 year
   
 
@@ -41,18 +41,20 @@ for i in range(len(params)):
 
     plt.show(block=False)
     time.sleep(1)
-
+    
     t = input('Threshold: ')
     if t == '':
         break
     else:
-        params.iloc[i]['Threshold (um)'] = t
-        params.iloc[i]['Shape'] = 0
-        params.iloc[i]['Scale'] = 0
-        params.iloc[i]['STDShape'] = 0
-        params.iloc[i]['STDScale'] = 0
-        params.iloc[i]['CovShapeScale'] = 0
-        params.iloc[i]['Rate (1/mm^3)'] = 0
-        params.iloc[i]['STDRate'] = 0
-        params.to_csv('parameters_new.csv')
+        ts.append(t)
+        params.loc[i, 'Threshold (um)'] = float(t)
+        params.loc[i,'Shape'] = 0
+        params.loc[i,'Scale'] = 0
+        params.loc[i,'STDShape'] = 0
+        params.loc[i,'STDScale'] = 0
+        params.loc[i,'CovShapeScale'] = 0
+        params.loc[i,'Rate (1/mm^3)'] = 0
+        params.loc[i,'STDRate'] = 0
+
+params.to_csv('parameters_new.csv')
     
