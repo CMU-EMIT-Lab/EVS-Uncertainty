@@ -22,9 +22,7 @@ except Exception:
     pass
 
 
-v1s = [395.84] #extrapolated volumes
-
-# files = ['CMU01-08-2', 'CMU04-03', 'CMU02-05-1', 'CMU04-26', 'CMU03-30-2', 'CMU04-04']
+v1s = [10, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500] #extrapolated volumes
 
 dx = 0.1 #resolution of CDF
 
@@ -43,22 +41,25 @@ X = Symbol('N')
 def getfn(stats):
     mu = stats[0]
     std = stats[1]
+
     l = Normal('l', mu, std)
     dl = Symbol('dl', real = True, nonnegative = True)
     fn = re(N(integrate(getprobpoiss(X, dl, density(l)(dl)), (dl, 0, oo)))/N(integrate(density(l)(dl), (dl, 0, oo))))
     return fn
 
 
-with cp.cuda.Device(1):
+with cp.cuda.Device(0):
     for v1 in v1s:
         #loops over all samples
-        for i in range(2, len(df)):
+        print(v1)
+        for i in range(0,len(df)):
             row = df.iloc[i]
-
-            # if row.Name in files:
-            #     print(row.Name)
-            # else:
+            if row.Name[0:5] == 'CMU04':
+                continue
+            # elif row.Name not in  ['CMU01-08-2', 'CMU02-05-1', 'CMU02-25-1', 'CMU03-30-2']:
             #     continue
+            else:
+                print(row.Name)
 
             pores = poredf[poredf.Name == row.Name]
             evd = pores[pores['Equivalent Spherical Diameter (um)']>row['Threshold (um)']]['Equivalent Spherical Diameter (um)']
@@ -102,9 +103,14 @@ with cp.cuda.Device(1):
 
             #get poisson distribution with gaussian estimator        
             fn = getfn(stats*v1)
-            fn1 = getfn(stats1*v1)
             xs = np.arange(np.max([stats[0]*v1 - 3*stats[1]*v1, 0]), stats[0]*v1 + 3*stats[1]*v1)
-            xs1 = np.arange(np.max([stats1[0]*v1 - 3*stats1[1]*v1, 0]), stats1[0]*v1 + 3*stats1[1]*v1)
+            try:
+                xs1 = np.arange(np.max([stats1[0]*v1 - 3*stats1[1]*v1, 0]), stats1[0]*v1 + 3*stats1[1]*v1)
+            except Exception:
+                xs1 = np.array([0]) # case where nothing is below threshold
+            
+            if len(xs1) == 0:
+                xs1 = np.array([0]) 
 
             probs = []
 
@@ -127,7 +133,10 @@ with cp.cuda.Device(1):
                 try:
                     probs1.append(N(fn1.subs(X, xs1[j])))
                 except Exception:
-                    probs1.append(0)
+                    if len(xs1) == 1:
+                        probs1.append(1)
+                    else:
+                        probs1.append(0)
             probs1 = np.array(probs1, dtype = float)
 
             dxs1 = 1
@@ -155,16 +164,20 @@ with cp.cuda.Device(1):
                     else:
                         pgs[i] = xs[0]
 
-            if stats[0]*v1 < 10:
-            #generate 1000 pore numbers for under threshold
+            samples = cp.array(sampler.rvs(1000)) #resample
+
+            if cp.sum(pgs == 0) > 0: 
                 for i in range(len(pgs1)):
-                    try:
-                        pgs1[i] = xs1[cp.max(np.argwhere(cdf1 < samples[i]))]
-                    except Exception:
-                        if samples[i]  > 0.5:
-                            pgs1[i] = xs1[-1]
-                        else:
-                            pgs1[i] = xs1[0]
+                    if pgs[i] > 0:
+                        continue
+                    else:
+                        try:
+                            pgs1[i] = xs1[cp.max(np.argwhere(cdf1 < samples[i]))]
+                        except Exception:
+                            if samples[i]  > 0.5:
+                                pgs1[i] = xs1[-1]
+                            else:
+                                pgs1[i] = xs1[0]
 
             else:
                 pgs1 = cp.ones_like(pgs1) * stats1[0]*v1
@@ -204,6 +217,30 @@ with cp.cuda.Device(1):
                         xs[ls] = cp.quantile(lefttail, qs)
 
                     ls+=len(samples)*ones.astype(int)
+            
+            xs = cp.reshape(xs, (len(pgs), len(ss), len(samples)))
+
+            #constant N would be first index xs[i]
+            #constant ss would be second index xs[:, i]
+            #constant sample would be third index xs[:, :, i]
+
+            sobol = cp.zeros(3)
+
+            variance = cp.var(xs, ddof = 1)
+
+            # First-order Sobol indices
+            sobol[0] = cp.var(cp.mean(xs, axis=(1,2)), ddof=1) / variance  # Effect of pgs
+            sobol[1] = cp.var(cp.mean(xs, axis=(0,2)), ddof=1) / variance  # Effect of ss
+            sobol[2] = cp.var(cp.mean(xs, axis=(0,1)), ddof=1) / variance  # Effect of samples
+            
+            sobol_t = cp.zeros(3)
+
+            #Total Sobol Index
+            sobol_t[0] = 1 - cp.var(cp.mean(xs, axis=0), ddof=1) / variance  # Effect of pgs
+            sobol_t[1] = 1 - cp.var(cp.mean(xs, axis=1), ddof=1) / variance  # Effect of ss
+            sobol_t[2] = 1 - cp.var(cp.mean(xs, axis=2), ddof=1) / variance  # Effect of samples
+
+            xs = xs.flatten()
 
             
             #generation of CDFs
@@ -214,7 +251,10 @@ with cp.cuda.Device(1):
             bins = (bins[1:] + bins[:-1])/2
 
             #saving cdf
-            np.save('CDFs/' + row.Name + '_CDF.npy', np.array([bins.get(), cdf.get()]))
+            np.save('CDFs/' + row.Name + '_CDF_{}.npy'.format(v1), np.array([bins.get(), cdf.get()]))
+
+            np.save('Sobol/' + row.Name + '_Sobol_{}.npy'.format(v1), sobol.get())
+            np.save('Sobol/' + row.Name + '_SobolT_{}.npy'.format(v1), sobol_t.get())
 
             del xs, xs2, pdf, bins, cdf, samples, ss, pgs, ones, pgs1, ls, qs, lefttail, cdf1, xs1, probs, probs1
             cp._default_memory_pool.free_all_blocks()
