@@ -18,12 +18,13 @@ Please use the following reference if you utilize this code.
 
 ```
 @article{miner2024stats,
-  title={Statistical Analysis to Assess Part-to-Coupon Porosity Equivalence for Fatigue of Additively Manufactured Parts},
+  title={Extreme value statistics with uncertainty to assess porosity equivalence across additively
+manufactured parts},
   author={Miner, Justin P. and Narra, Sneha Prabha},
-  journal={},
+  journal={Reliability Engineering \& System Safety},
   volume={},
   pages={},
-  year={},
-  publisher={},
+  year={2025},
+  publisher={Elsevier},
   doi = {}
 }
