@@ -26,5 +26,5 @@ manufactured parts},
   pages={},
   year={2025},
   publisher={Elsevier},
-  doi = {}
+  doi = {10.1016/j.ress.2025.111207}
 }
