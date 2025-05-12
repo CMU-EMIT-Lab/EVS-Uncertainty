@@ -17,7 +17,7 @@ To use the test data that was used in the referenced paper, download it from thi
 Please use the following reference if you utilize this code.
 
 ```
-@article{miner2024stats,
+@article{miner2025stats,
   title={Extreme value statistics with uncertainty to assess porosity equivalence across additively
 manufactured parts},
   author={Miner, Justin P. and Narra, Sneha Prabha},
