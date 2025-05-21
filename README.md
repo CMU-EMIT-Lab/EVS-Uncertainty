@@ -22,8 +22,8 @@ Please use the following reference if you utilize this code.
 manufactured parts},
   author={Miner, Justin P. and Narra, Sneha Prabha},
   journal={Reliability Engineering \& System Safety},
-  volume={},
-  pages={},
+  volume={262},
+  pages={111207},
   year={2025},
   publisher={Elsevier},
   doi = {10.1016/j.ress.2025.111207}
